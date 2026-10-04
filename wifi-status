@@ -1,0 +1,12 @@
+#!/bin/sh
+. /usr/lib/liveos/common.sh
+guard; json_head
+IF=$(wifi_if)
+SSID=""; IP=""
+if [ -n "$IF" ]; then
+	SSID=$(iw dev "$IF" link 2>/dev/null | sed -n 's/^[[:space:]]*SSID: //p' | head -n1 | tr -d '"\\')
+	IP=$(ip -4 -o addr show "$IF" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)
+fi
+CONN=false
+ip route 2>/dev/null | grep -q '^default' && CONN=true
+printf '{"connected":%s,"ssid":"%s","ip":"%s","iface":"%s"}' "$CONN" "$SSID" "$IP" "$IF"

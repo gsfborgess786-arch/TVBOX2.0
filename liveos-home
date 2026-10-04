@@ -1,0 +1,3 @@
+#!/bin/sh
+# Tecla Home: fecha o app aberto (Netflix, YouTube...) e o kiosk reabre a interface.
+killall cog 2>/dev/null

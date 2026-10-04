@@ -1,0 +1,7 @@
+#!/bin/sh
+. /usr/lib/liveos/common.sh
+guard; json_head
+case "$(qget action)" in
+	reboot)   echo '{"ok":true}'; ( sleep 2; reboot )   </dev/null >/dev/null 2>&1 & ;;
+	*)        echo '{"ok":false}' ;;
+esac

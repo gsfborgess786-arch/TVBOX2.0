@@ -1,0 +1,20 @@
+#!/bin/sh
+# Mantem o navegador (Cog/WPE) aberto na interface, em tela cheia, por DRM/KMS.
+export XDG_RUNTIME_DIR=/run/user/0
+mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+export COG_PLATFORM_DRM_VIDEO_MODE="${LIVEOS_MODE:-1280x720}"
+URL=http://127.0.0.1:8080/liveos.html
+
+# espera o servidor local responder
+n=0
+while [ $n -lt 20 ]; do
+	wget -q -O /dev/null "$URL" && break
+	n=$((n+1)); sleep 1
+done
+
+FIRST=1
+while true; do
+	if [ "$FIRST" = 1 ]; then U="$URL"; FIRST=0; else U="$URL?quick"; fi   # ?quick = volta sem animacao de boot
+	cog -P drm "$U"
+	sleep 1
+done

@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiveOS</title>
+<style>
+/* 1rem = 16px numa tela de 1280px; tudo escala com a largura da TV */
+:root{--bg:#050505;--accent:#0078D7;--bad:#E51400}
+*{box-sizing:border-box}
+html{font-size:max(10px,1.25vw)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:#fff;font-family:"Segoe UI","Selawik",Roboto,"Liberation Sans","DejaVu Sans",sans-serif}
+button{font-family:inherit}
+:focus{outline:none}
+::-webkit-scrollbar{display:none}
+svg.i{width:1.2em;height:1.2em;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+
+/* ===== telas ===== */
+.screen{position:absolute;inset:0;overflow:hidden;opacity:0;pointer-events:none;transform:scale(.95);z-index:-1;transition:opacity .5s,transform .5s}
+.screen.active{opacity:1;pointer-events:auto;transform:none;z-index:10}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.4rem;background:#000}
+.loader{display:flex;gap:.5rem;width:19rem;justify-content:center;overflow:hidden}
+.dot{width:.65rem;height:.65rem;background:#fff;border-radius:50%;opacity:0;animation:win8move 2.5s infinite cubic-bezier(.1,.8,.9,.1)}
+.dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}.dot:nth-child(4){animation-delay:.45s}.dot:nth-child(5){animation-delay:.6s}
+@keyframes win8move{0%{transform:translateX(-9rem);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(9rem);opacity:0}}
+@keyframes turnstile{0%{opacity:0;transform:perspective(600px) rotateY(-90deg)}100%{opacity:1;transform:perspective(600px) rotateY(0)}}
+.turnstile-in{animation:turnstile .35s cubic-bezier(.2,.8,.3,1) forwards}
+
+/* ===== home ===== */
+#home-screen{overflow-y:auto}
+.header{display:flex;justify-content:space-between;align-items:flex-start;padding:2rem 3.75rem 1rem}
+.header h1{margin:0;font-size:2.6rem;font-weight:300}
+.header p{margin:0;font-size:1.1rem;color:#bbb;min-height:1.5rem;animation:fadeIn .6s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.hc{display:flex;align-items:center;gap:.8rem;padding-top:.4rem}
+.btn{display:inline-flex;align-items:center;gap:.5rem;border:.15rem solid #fff;background:transparent;color:#fff;padding:.55rem 1.1rem;font-weight:600;font-size:.95rem;cursor:pointer;border-radius:.2rem}
+.btn:focus,.btn:hover{background:#fff;color:#000}
+.btn.red{border-color:var(--bad);color:var(--bad)}.btn.red:focus,.btn.red:hover{background:var(--bad);color:#fff}
+.btn.blue{border-color:var(--accent);background:var(--accent)}.btn.blue:focus,.btn.blue:hover{background:#fff;color:var(--accent)}
+#wifi-ind{display:flex;align-items:center;gap:.4rem;font-size:.9rem;color:#777;margin-right:.6rem}
+#wifi-ind.on{color:#fff}
+#clock{font-size:2rem;font-weight:300;min-width:5.5rem;text-align:right}
+
+.metro{display:grid;grid-template-columns:repeat(6,1fr);grid-auto-flow:dense;gap:.9rem;padding:.6rem 3.75rem 2.5rem;max-width:84rem}
+.tile{position:relative;height:7.5rem;cursor:pointer;overflow:hidden;transition:transform .2s}
+.tile.wide{grid-column:span 2}
+.tile:focus,.tile:hover{transform:scale(1.04);outline:.2rem solid #fff;z-index:5}
+.tile-inner{width:100%;height:100%;position:relative;transition:transform .8s;transform-style:preserve-3d}
+.tile.flipped .tile-inner{transform:rotateY(180deg)}
+.front,.back{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;align-items:flex-end;padding:.9rem;font-size:1.2rem;font-weight:600}
+.back{transform:rotateY(180deg);background:rgba(0,0,0,.8);flex-direction:column;justify-content:center;align-items:flex-start;font-weight:400;font-size:1rem;border-left:.3rem solid #fff;gap:.2rem}
+.back small{color:#ccc;font-size:.85rem}
+.ico{position:absolute;left:.9rem;top:.8rem;width:2.7rem;height:2.7rem;object-fit:contain}
+svg.ico{stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ltr{position:absolute;left:.9rem;top:.55rem;font-size:2.5rem;font-weight:700;line-height:1}
+
+/* ===== telas internas ===== */
+#app-screen{background:#111;display:flex;flex-direction:column}
+#app-content-area{flex:1;display:flex;flex-direction:column;min-height:0}
+.app-wrapper{display:flex;flex-direction:column;height:100%}
+.app-top{display:flex;align-items:center;gap:1.2rem;padding:1rem 3rem;background:#1b1b1b;border-bottom:1px solid #333}
+.app-top h2{margin:0;font-size:1.8rem;font-weight:300}
+.app-body{flex:1;overflow-y:auto;padding:1.6rem 3rem;min-height:0}
+.cfg{display:flex;gap:2rem;height:100%}
+.cfg-side{width:15rem;flex-shrink:0}
+.cfg-item{padding:.9rem 1.2rem;font-size:1.05rem;color:#ccc;border-left:.2rem solid transparent;cursor:pointer}
+.cfg-item.on{border-left-color:var(--accent);color:#fff;background:#1b1b1b}
+.cfg-item:focus,.cfg-item:hover{background:#fff;color:#000}
+.cfg-main{flex:1;overflow-y:auto;padding-right:.5rem}
+.cfg-main h3{margin:0 0 1rem;font-size:1.6rem;font-weight:300}
+.cfg-main p{color:#bbb;line-height:1.5;margin:.4rem 0}
+.row{display:flex;align-items:center;gap:1rem;padding:.9rem 1rem;background:rgba(255,255,255,.07);margin:.4rem 0;cursor:pointer;font-size:1.05rem}
+.row:focus,.row:hover{background:#fff;color:#000}
+.row b{flex:1;font-weight:500}.row small{opacity:.7}
+.pill{display:inline-block;padding:.25rem .8rem;border:.1rem solid #555;border-radius:2rem;margin:.2rem .3rem .2rem 0;font-size:.95rem;cursor:pointer;background:transparent;color:#fff}
+.pill.on{background:var(--accent);border-color:var(--accent)}
+.pill:focus,.pill:hover{background:#fff;color:#000;border-color:#fff}
+.tabs{margin-bottom:1rem}
+.store-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.9rem}
+.card{display:flex;align-items:center;gap:.9rem;background:#1b1b1b;border:.1rem solid #2a2a2a;padding:.9rem}
+.card .swatch{width:3.4rem;height:3.4rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.card .swatch img{width:2.2rem;height:2.2rem;object-fit:contain}
+.card .info{flex:1;min-width:0}.card .info b{display:block;font-weight:600}.card .info small{color:#888}
+.card .btn{padding:.4rem .8rem;font-size:.85rem}
+.ok{color:#4CAF50}
+
+/* ===== standby ===== */
+.full{position:fixed;inset:0;background:#000;z-index:1000;display:none}
+.full.on{display:block;animation:fadeIn .9s ease}
+.layer{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity 2.4s}
+.layer.show{opacity:1}
+.layer.kb{animation:kb 60s linear forwards}
+@keyframes kb{from{transform:scale(1)}to{transform:scale(1.1)}}
+#sb-shade{position:absolute;inset:0 38% 0 0;background:linear-gradient(to right,rgba(0,0,0,.62),rgba(0,0,0,0))}
+#sb-info{position:absolute;left:4rem;top:3.2rem;text-shadow:0 2px 14px rgba(0,0,0,.7)}
+#sb-time{font-size:8rem;font-weight:200;line-height:1;letter-spacing:-.1rem}
+#sb-date{font-size:1.9rem;margin-top:.6rem;font-weight:300}
+#sb-wx{font-size:1.6rem;margin-top:.5rem;font-weight:300;color:#e8f5e0;min-height:2rem}
+#sb-txt{font-size:1.4rem;margin-top:1.6rem;max-width:30rem;line-height:1.35;font-weight:300;opacity:.92}
+#sb-cred{position:absolute;right:1.5rem;bottom:.9rem;font-size:.8rem;color:rgba(255,255,255,.5)}
+
+/* ===== teclado na tela, instalação, aviso ===== */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:900;display:none;align-items:center;justify-content:center}
+.overlay.on{display:flex}
+.box{background:#1d6093;border:1px solid rgba(255,255,255,.3);padding:1.6rem 2rem;min-width:36rem}
+.box h3{margin:0 0 1rem;font-weight:300;font-size:1.5rem}
+#osk-val{background:rgba(255,255,255,.15);border-bottom:.15rem solid #fff;padding:.6rem .8rem;font-size:1.3rem;min-height:2.8rem;margin-bottom:1rem;word-break:break-all}
+.krow{display:flex;gap:.3rem;margin-bottom:.3rem;justify-content:center}
+.k{min-width:2.9rem;height:2.9rem;background:rgba(255,255,255,.14);border:0;color:#fff;font-size:1.15rem;cursor:pointer}
+.k.w{min-width:6.2rem;font-size:.95rem}
+.k:focus,.k:hover{background:#fff;color:#1d6093}
+#install .box{text-align:center;background:#1b1b1b;min-width:26rem}
+.bar{height:.7rem;background:#333;margin-top:1rem}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4CAF50,#0078D7)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{width:4.4rem;height:4.4rem;animation:spin .9s linear infinite}
+#toast{position:fixed;left:50%;bottom:2.2rem;transform:translateX(-50%);background:#0078D7;padding:.8rem 1.6rem;font-size:1.15rem;display:none;z-index:1100;max-width:80%}
+</style>
+</head>
+<body>
+
+<div id="blank-screen" class="screen active center"></div>
+
+<div id="home-screen" class="screen">
+  <header class="header">
+    <div>
+      <h1 id="greeting-title">LiveOS</h1>
+      <p id="greeting-sub"></p>
+    </div>
+    <div class="hc">
+      <div id="wifi-ind"><svg class="i" viewBox="0 0 24 24" data-ico="wifi"></svg><span id="wifi-txt">Wi-Fi</span></div>
+      <button class="btn" data-nav data-act="standby"><svg class="i" viewBox="0 0 24 24" data-ico="moon"></svg>Standby</button>
+      <div id="clock">00:00</div>
+    </div>
+  </header>
+  <div class="metro" id="main-grid"></div>
+</div>
+
+<div id="app-screen" class="screen"><div id="app-content-area"></div></div>
+
+<div id="standby-screen" class="full">
+  <div class="layer" id="sb-a"></div><div class="layer" id="sb-b"></div>
+  <div id="sb-shade"></div>
+  <div id="sb-info"><div id="sb-time">--:--</div><div id="sb-date"></div><div id="sb-wx"></div><div id="sb-txt"></div></div>
+  <div id="sb-cred">Fotos: Unsplash</div>
+</div>
+
+<div id="osk" class="overlay">
+  <div class="box">
+    <h3 id="osk-title">Digite</h3>
+    <div id="osk-val"></div>
+    <div id="osk-keys"></div>
+  </div>
+</div>
+
+<div id="install" class="overlay">
+  <div class="box"><h3 id="inst-name">Instalando…</h3><div id="inst-pct">0%</div><div class="bar"><i id="inst-bar"></i></div></div>
+</div>
+
+<div id="toast"></div>
+
+<script>window.LIVEOS_TOKEN='__TOKEN__';</script>
+<script>
+(function(){
+'use strict';
+
+/* =====================================================
+   CONFIG
+   ===================================================== */
+var DEF_LOC={lat:-23.55,lon:-46.63,city:'São Paulo'};
+function U(id){return 'https://images.unsplash.com/photo-'+id+'?auto=format&fit=crop&w=1280&q=70';}
+var LAND={
+  amanhecer:[U('1470071459604-3b5ec3a7fe05'),U('1501785888041-af3ef285b470'),U('1448375240586-882707db888b')],
+  dia:[U('1506744038136-46273834b3fb'),U('1472214103451-9374bd1c798e'),U('1500530855697-b586d89ba3ee'),U('1441974231531-c6227db76b6e'),U('1465146344425-f00d5f5c8f07')],
+  entardecer:[U('1475924156734-496f6cac6ec1'),U('1507525428034-b723cf961d3e'),U('1476514525535-07fb3b4ae5f1')],
+  noite:[U('1419242902214-272b3f66ee7a'),U('1472396961693-142e6e269027')]
+};
+var FALLBACK={amanhecer:'linear-gradient(#f6b98a,#6a7fa8)',dia:'linear-gradient(#5aa9e6,#2d6a4f)',entardecer:'linear-gradient(#ff7a45,#3b2a5a)',noite:'linear-gradient(#0b1026,#1b2a49)'};
+var FRASES={
+  amanhecer:['Bom dia. O dia está só começando.','Café na mão e o mundo acordando devagar.'],
+  dia:['Boa tarde. Que tal uma pausa para um filme?','O dia rende mais com uma boa trilha sonora.'],
+  entardecer:['O céu está cuidando do espetáculo de hoje.','Fim de tarde: hora de desacelerar.'],
+  noite:['Boa noite. Descanse, amanhã tem mais.','Luzes baixas, casa em silêncio.']
+};
+
+/*ICONS_BEGIN*/
+var ICONS={
+"netflix": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTUgM2gzLjR2MThINXoiLz48cGF0aCBkPSJNMTUuNiAzSDE5djE4aC0zLjR6Ii8+PHBhdGggZD0iTTUgM2gzLjRMMTkgMjFoLTMuNHoiLz48L3N2Zz4=",
+"youtube": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHJlY3QgeD0iMiIgeT0iNSIgd2lkdGg9IjIwIiBoZWlnaHQ9IjE0IiByeD0iNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0xMCA5bDUuNSAzLTUuNSAzeiIvPjwvc3ZnPg==",
+"prime": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTMuNSAxNS41YzUgMy41MDAgMTIgMy41MDAgMTcgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0xNy41MDAgMTQuNTAwbDMgMS0xIDMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOS41MDAgNC41MDBsNi41MDAgMy44MDAtNi41MDAgMy44MDB6Ii8+PC9zdmc+",
+"disney": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTMgMTZhOSA5IDAgMCAxIDE4IDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMTIgMTF2OE04IDE1aDgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"globoplay": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxlbGxpcHNlIGN4PSIxMiIgY3k9IjEyIiByeD0iNCIgcnk9IjkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMyAxMmgxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==",
+"max": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTQgMTlWNmw4IDggOC04djEzIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMi42IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"crunchyroll": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOS41MDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48Y2lyY2xlIGN4PSIxMy41MDAiIGN5PSIxMiIgcj0iNC43MDAiLz48L3N2Zz4=",
+"spotify": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOS41MDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNNi44MDAgOS4zMDBjMy43MDAtMS4xMDAgNy43MDAtLjcgMTAuNzAwIDEuMTAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTcuNTAwIDEyLjUwMGMzLS44IDYtLjUgOC43MDAgMSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik04LjIwMCAxNS42MDBjMi4zMDAtLjYgNC42MDAtLjQgNi42MDAuNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==",
+"twitch": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTQgM2gxN3YxMWwtNSA1aC00bC0zIDN2LTNINHoiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMTIgOHY0TTE2LjUwMCA4djQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"xbox": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOS41MDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOCA4bDggOE0xNiA4bC04IDgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"apple": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHJlY3QgeD0iMyIgeT0iNC41MDAiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxMi41MDAiIHJ4PSIyIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTEwIDhsNC41MDAgMi44MDAtNC41MDAgMi44MDB6Ii8+PHBhdGggZD0iTTggMjAuNTAwaDgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"paramount": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTIuNTAwIDIwTDkgOGwzIDUgMy41MDAtNUwyMS41MDAgMjB6IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGNpcmNsZSBjeD0iMTciIGN5PSI0LjgwMCIgcj0iMS4yMDAiLz48L3N2Zz4=",
+"pluto": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iNS41MDAiLz48ZWxsaXBzZSBjeD0iMTIiIGN5PSIxMiIgcng9IjEwIiByeT0iMy42MDAiIHRyYW5zZm9ybT0icm90YXRlKC0yNSAxMiAxMikiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"looke": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTIgMTJjMy01IDctNyAxMC03czcgMiAxMCA3Yy0zIDUtNyA3LTEwIDdzLTctMi0xMC03eiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiLz48L3N2Zz4=",
+"mubi": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHJlY3QgeD0iMyIgeT0iOS41MDAiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxMC41MDAiIHJ4PSIxIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTMgOS41MDBMMi4zMDAgNWwxOC40MDAgMy4zMDAuMyAxLjIwME04IDYuMjAwbDEuODAwIDNNMTMuNTAwIDcuMjAwbDEuODAwIDIuODAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+",
+"plex": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTcuNTAwIDNoNS41MDBsNiA5LTYgOUg3LjUwMGw2LTl6Ii8+PC9zdmc+",
+"ytmusic": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOS41MDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMTAgOC41MDBsNS41MDAgMy41MDAtNS41MDAgMy41MDB6Ii8+PC9zdmc+",
+"deezer": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHJlY3QgeD0iMi41MDAiIHk9IjE2IiB3aWR0aD0iMyIgaGVpZ2h0PSIzIi8+PHJlY3QgeD0iNi41MDAiIHk9IjEzIiB3aWR0aD0iMyIgaGVpZ2h0PSI2Ii8+PHJlY3QgeD0iMTAuNTAwIiB5PSIxMCIgd2lkdGg9IjMiIGhlaWdodD0iOSIvPjxyZWN0IHg9IjE0LjUwMCIgeT0iNyIgd2lkdGg9IjMiIGhlaWdodD0iMTIiLz48cmVjdCB4PSIxOC41MDAiIHk9IjQiIHdpZHRoPSIzIiBoZWlnaHQ9IjE1Ii8+PC9zdmc+",
+"soundcloud": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTcuNTAwIDE4LjUwMGgxMC41MDBhMy41MDAgMy41MDAgMCAwIDAgLjUtNyA1LjUwMCA1LjUwMCAwIDAgMC0xMC43MDAtMS4yMDBBNC4xMDAgNC4xMDAgMCAwIDAgNy41MDAgMTguNTAweiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0zLjUwMCAxM3Y1IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+",
+"geforce": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHJlY3QgeD0iMyIgeT0iNCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjEyLjUwMCIgcng9IjEuNTAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTkgMjAuNTAwaDZNMTIgMTYuNTAwdjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMTAuMjAwIDcuNTAwbDQuMzAwIDIuNzAwLTQuMzAwIDIuNzAweiIvPjwvc3ZnPg==",
+"cazetv": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOS41MDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMTIgOGwzLjUwMCAyLjUwMC0xLjMwMCA0aC00LjQwMGwtMS4zMDAtNHoiLz48cGF0aCBkPSJNMTIgMi41MDBWOE0xNS41MDAgMTAuNTAwbDUuNTAwLTEuNzAwTTE0LjIwMCAxNC41MDBsMy4zMDAgNC4zMDBNOS44MDAgMTQuNTAwbC0zLjMwMCA0LjMwME04LjUwMCAxMC41MDBMMyA4LjgwMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==",
+"espn": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTE4IDQuNTAwSDd2MTVoMTFNNyAxMmg5IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMi44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"dazn": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTUgNWgxNEw1IDE5aDE0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMi44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=",
+"tiktok": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTE0IDN2MTEuNTAwYTMuNjAwIDMuNjAwIDAgMSAxLTMuNjAwLTMuNjAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE0IDNjLjUgMi42MDAgMi4yMDAgNC4xMDAgNSA0LjMwMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg=="
+};
+/*ICONS_END*/
+var SPIN='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAC9FBMVEX////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////3x43lAAAA/HRSTlMAFVWMtNXr9wECEm3F+fr7/P3+AwQFBhiH6vb4BwgJb+fz9PUKCyPB8PHyDQ4MSeDvD17p7e4QEWDsExRH5aNlNhYl2+bo0Re55HAZGmfi48wtGxzhvB2B38YeH93e3CogIWkirtrAJNfY2VcmJ0rWzygpd9SOl9LTVCsssy7E0C8wzc4xMss0M7/JN6zHOThNPDs6bsPCfj8+PUO+QUC9u0hFREKYup5GNVO4t7a1S6tMTmyysK+VUlBPsa2IVlGpp1pYj6qlm19cpKGfnIRZY6idlmpkYqKgmZSSiYaDgHx5dnNraGZhXVuak5GLhYJ9enRxkI1yinh1e3/ESIaaAAAEVElEQVRYw2NgGAWjAB9gZGJmYWVjZ+DgBAIOUnVzcfOw8/LxCwgKAQ0QFhEVExMhxQxxCUkpdmkUA2Rk5cSINUJEXkFRSVkK1QWyciqqqmJE6VdT19DUAhkgzQs3AOQAFVVtHV1hwvr19A2ABgCdAPID1ACQD1RUdbV1DA0JOsLI2MTUAOoEoB/ABkB9ANRvZs4li1+/hSSbJcgEoBOAfoAbAPQB0AEg/VbWcvj029gag00AO4HNzt7BUYYBZALIB0AHgPQzgoRwASdnFwVXkAlAT7hZqCLHjJwu0AMg/e7i4iI448/D0xZigqmrF3poiQE9ANbv7eOIK0H4+vlDTQgIxJQVNoTqDwrWxq7fnTUEakIoIzZ5TjOo/rAw7MkhPEJfH2xEpBV2GzitxUHao6KjsSowZ42JjQCZEBePK5BEvcH6ExITsTnBwjkuDmxEEu5o0gZrT1ZTM8MimZKaCjYiTQS3ARxBYO3pTmGYclYZmVlZIDOy8aU07WSgbqecnFxMW/Ly8zNAZhTgTaqcySDdhYVFhhhSxSWsrKxAQ0rxZxbv3MKiovj4eHEMmbLyioqKkhLWSvwGmMXHV1VVV1cnYMjUuLm5lZeXV9TiN0CuujowMLC2thBDpq4ACOrr680IlHcNQNDY2IhpTxMYNDeL4jeAo6WlpRUEMGTaoICQAe0Q0IEh09kFAYS80O0ABpgu6OkFgcjIKvwGaPf19fUDQSOGTGkkDw9PXV3dBAJ1zsRJkyZNnjy5CENmSt3UqVOnTVOfjt+A+BkzZ82aOHFiIobM7Gnq6mlpnXNY8JbbwjPmzp03Y8bMmY6YxUFnZ+ecOfNDFyzEZ0DQosWzlwDNmIelglk6H6h7wTKP5fiy80ybFYsWA81YiUVyVShQ9+o1a9etwlNvrs/TWwgyIwqLpGENWDtLzYYEXPoNN27aCDZiMdbkthmsfcvWbdt1sOuXWbhj564JICOwl5pWPUDtu7em7Nmw1xCbvKzNvsod+3dtmrDRBkdMrQJZn9Kz4cDBUixlnvnOQ4f3Va7aD3SEGq5IPrJ1256eowcOHrM7rodWcHPWGp04CTSBadWOnfM4cZZXp6D6T585e24SUlSLxJ+3v2BhBDFhky7uaFp54OhFsP5Lx5deZjbqD1MVFlbxaVh/ZXOS79VrYBOyK33wpbQVQP2nrt9YfvZm2a3bR5jv3L13/8HDR4+9uJ88fXbh+YkXLw8dTsefWWbbgfW/Wnr59ZvSt3vfvb//4WPxp89TgE6wB5lwKJ1QI6njJsgDN8u23/7yFW7AN3nuK0+fAT1xKIpwM839PtgBt94c+fpdAmzAj5/fvKY8ATlhlxlRDc31l4EOAPqA+Q7UgEePgX648vRaIyeRbVUzpi+3bn8pfXtH4hzQgF8/Hn36LM/tO0uVhNay7txPpV/f3rkLNuDho0/fDrXIktpg126ccO3br98ffiZlzy5UGe3+jAK8AAAQo86mFnvuPwAAAABJRU5ErkJggg==';
+/* Só entretenimento. "home" = já vem fixado na tela inicial. */
+var APPS=[
+ {id:'netflix',n:'Netflix',u:'https://www.netflix.com/browse',d:'netflix.com',c:'#b20710',cat:'Streaming',tag:'Filmes e séries',home:1},
+ {id:'youtube',n:'YouTube',u:'https://www.youtube.com/tv',d:'youtube.com',c:'#c4302b',cat:'Streaming',tag:'Vídeos para todos os gostos',home:1},
+ {id:'prime',n:'Prime Video',u:'https://www.primevideo.com',d:'primevideo.com',c:'#00a8e1',cat:'Streaming',tag:'Filmes, séries e originais',home:1},
+ {id:'disney',n:'Disney+',u:'https://www.disneyplus.com',d:'disneyplus.com',c:'#113ccf',cat:'Streaming',tag:'Disney, Pixar, Marvel e Star Wars',home:1},
+ {id:'globoplay',n:'Globoplay',u:'https://globoplay.globo.com',d:'globoplay.globo.com',c:'#e8452c',cat:'Streaming',tag:'Novelas, séries e ao vivo',home:1},
+ {id:'max',n:'Max',u:'https://play.max.com',d:'max.com',c:'#002be7',cat:'Streaming',tag:'Séries e filmes HBO',home:1},
+ {id:'crunchyroll',n:'Crunchyroll',u:'https://www.crunchyroll.com',d:'crunchyroll.com',c:'#f47521',cat:'Streaming',tag:'Animes',sq:1,home:1},
+ {id:'spotify',n:'Spotify',u:'https://open.spotify.com',d:'spotify.com',c:'#1db954',cat:'Música',tag:'Músicas e podcasts',home:1},
+ {id:'twitch',n:'Twitch',u:'https://www.twitch.tv',d:'twitch.tv',c:'#6441a5',cat:'Games',tag:'Transmissões ao vivo',home:1},
+ {id:'xbox',n:'Xbox Cloud',u:'https://www.xbox.com/play',d:'xbox.com',c:'#107c10',cat:'Games',tag:'Jogos na nuvem',sq:1,home:1},
+ {id:'apple',n:'Apple TV+',u:'https://tv.apple.com',d:'tv.apple.com',c:'#333333',cat:'Streaming',tag:'Séries e filmes originais'},
+ {id:'paramount',n:'Paramount+',u:'https://www.paramountplus.com',d:'paramountplus.com',c:'#0064ff',cat:'Streaming',tag:'Filmes, séries e esportes'},
+ {id:'pluto',n:'Pluto TV',u:'https://pluto.tv',d:'pluto.tv',c:'#2b2b2b',cat:'Streaming',tag:'Canais grátis ao vivo'},
+ {id:'looke',n:'Looke',u:'https://www.looke.com.br',d:'looke.com.br',c:'#009688',cat:'Streaming',tag:'Cinema nacional e clássicos'},
+ {id:'mubi',n:'Mubi',u:'https://mubi.com',d:'mubi.com',c:'#0b5394',cat:'Streaming',tag:'Cinema de autor'},
+ {id:'plex',n:'Plex',u:'https://app.plex.tv',d:'plex.tv',c:'#e5a00d',cat:'Streaming',tag:'Sua mídia e canais grátis'},
+ {id:'ytmusic',n:'YouTube Music',u:'https://music.youtube.com',d:'music.youtube.com',c:'#c4302b',cat:'Música',tag:'Clipes e músicas'},
+ {id:'deezer',n:'Deezer',u:'https://www.deezer.com',d:'deezer.com',c:'#9C27B0',cat:'Música',tag:'Músicas e podcasts'},
+ {id:'soundcloud',n:'SoundCloud',u:'https://soundcloud.com',d:'soundcloud.com',c:'#ff5500',cat:'Música',tag:'Independentes e remixes'},
+ {id:'geforce',n:'GeForce NOW',u:'https://play.geforcenow.com',d:'play.geforcenow.com',c:'#4a8c00',cat:'Games',tag:'Jogos de PC na nuvem'},
+ {id:'cazetv',n:'CazéTV',u:'https://www.youtube.com/@CazeTV',d:'youtube.com',c:'#6a1b9a',cat:'Esportes',tag:'Futebol ao vivo'},
+ {id:'espn',n:'ESPN',u:'https://www.espn.com.br',d:'espn.com.br',c:'#d00000',cat:'Esportes',tag:'Notícias e transmissões'},
+ {id:'dazn',n:'DAZN',u:'https://www.dazn.com',d:'dazn.com',c:'#333333',cat:'Esportes',tag:'Lutas e futebol'},
+ {id:'tiktok',n:'TikTok',u:'https://www.tiktok.com',d:'tiktok.com',c:'#0b5394',cat:'Vídeos',tag:'Vídeos curtos'}
+];
+var SYS={
+ loja:{id:'loja',n:'Loja',c:'#009688',ico:'store',tag:'Mais apps de entretenimento',interno:1},
+ config:{id:'config',n:'Configurações',c:'#E51400',ico:'gear',tag:'Wi-Fi e Standby',interno:1}
+};
+var CATS=['Todos','Streaming','Música','Games','Esportes','Vídeos'];
+
+/* =====================================================
+   UTILITÁRIOS
+   ===================================================== */
+var $=function(id){return document.getElementById(id);};
+var IC={
+ moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>',
+ wifi:'<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+ store:'<path d="M5 8h14l-1 12H6L5 8z"/><path d="M9 8a3 3 0 0 1 6 0"/>',
+ back:'<path d="M15 5l-7 7 7 7"/>'
+};
+function ico(n){return '<svg class="i" viewBox="0 0 24 24">'+IC[n]+'</svg>';}
+function fillIcons(root){var l=(root||document).querySelectorAll('[data-ico]'),i;for(i=0;i<l.length;i++)l[i].innerHTML=IC[l[i].getAttribute('data-ico')];}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function pad(n){return n<10?'0'+n:''+n;}
+function pick(a){return a[Math.floor(Math.random()*a.length)];}
+var store={
+ get:function(k,d){try{var v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;}},
+ set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+};
+var toastT;
+function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toastT);toastT=setTimeout(function(){t.style.display='none';},3200);}
+function appById(id){for(var i=0;i<APPS.length;i++)if(APPS[i].id===id)return APPS[i];return null;}
+function periodo(){var h=new Date().getHours();if(h>=5&&h<9)return 'amanhecer';if(h>=9&&h<17)return 'dia';if(h>=17&&h<19)return 'entardecer';return 'noite';}
+var DIAS=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+var MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+function json(url,cb){fetch(url,{cache:'no-store'}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(d){cb(null,d);}).catch(function(){cb(1);});}
+/* API local do sistema (BusyBox httpd + CGI). Fora do TV Box (ex.: testando no PC) ela não existe. */
+var TOKEN=window.LIVEOS_TOKEN||'';
+function api(p,cb){json('/cgi-bin/'+p+(p.indexOf('?')>=0?'&':'?')+'t='+TOKEN,cb);}
+
+/* =====================================================
+   TELAS
+   ===================================================== */
+function tela(id){var l=document.querySelectorAll('.screen'),i;for(i=0;i<l.length;i++)l[i].classList.remove('active');$(id).classList.add('active');}
+function telaAtiva(){return document.querySelector('.screen.active');}
+function restart(el,anim){el.style.animation='none';void el.offsetHeight;el.style.animation=anim;}
+
+var quick=/[?&]quick/.test(location.search);   // volta rápida (tecla Home) sem animação de boot
+function ligar(){quick=false;entrar();}   // boot direto: sem animação, cai na tela inicial
+function entrar(){
+  tela('home-screen');renderHome();relogio();
+  clima(function(t){$('greeting-sub').textContent=t||'Bem-vindo';});
+  statusWifi(function(on){
+    if(!on)setTimeout(function(){abrirInterno(SYS.config,'rede');toast('Sem internet. Escolha sua rede Wi-Fi.');},900);
+  });
+  resetOcioso();
+  var p=document.querySelector('#main-grid .tile');if(p)p.focus();
+}
+function reiniciar(){
+  toast('Reiniciando…');
+  api('power?action=reboot',function(err){if(err)location.reload();});
+}
+
+/* =====================================================
+   HOME
+   ===================================================== */
+function relogio(){
+  var d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes());
+  if($('standby-screen').classList.contains('on')){
+    $('sb-time').textContent=pad(d.getHours())+':'+pad(d.getMinutes());
+    $('sb-date').textContent=DIAS[d.getDay()]+', '+d.getDate()+' de '+MESES[d.getMonth()];
+  }
+}
+setInterval(relogio,1000);
+
+var instalados=store.get('apps',null);
+if(!instalados){instalados=APPS.filter(function(a){return a.home;}).map(function(a){return a.id;});}
+
+function tileEl(a){
+  var t=document.createElement('div');
+  t.className='tile'+(a.sq?'':' wide');t.id='tile-'+a.id;t.tabIndex=0;
+  t.setAttribute('data-nav','');t.setAttribute('data-act','abrir');t.setAttribute('data-arg',a.id);
+  t.style.background=a.c;
+  var front=document.createElement('div');front.className='front';
+  if(a.interno){
+    var s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','ico');s.innerHTML=IC[a.ico];front.appendChild(s);
+  }else{
+    var im=document.createElement('img');im.className='ico';im.alt='';
+    im.src=ICONS[a.id]||'';
+    im.onerror=function(){var l=document.createElement('span');l.className='ltr';l.textContent=a.n.charAt(0);if(im.parentNode)im.parentNode.replaceChild(l,im);};
+    front.appendChild(im);
+  }
+  front.appendChild(document.createTextNode(a.n));
+  var back=document.createElement('div');back.className='back';
+  back.innerHTML='<b>'+esc(a.n)+'</b><small>'+esc(a.tag||'')+'</small>';
+  var inner=document.createElement('div');inner.className='tile-inner';
+  inner.appendChild(front);inner.appendChild(back);t.appendChild(inner);
+  return t;
+}
+function renderHome(){
+  var g=$('main-grid');g.innerHTML='';
+  instalados.forEach(function(id){var a=appById(id);if(a)g.appendChild(tileEl(a));});
+  g.appendChild(tileEl(SYS.loja));g.appendChild(tileEl(SYS.config));
+}
+/* giro 3D aleatório (animação do LiveOS original) */
+setInterval(function(){
+  if(telaAtiva()&&telaAtiva().id!=='home-screen')return;
+  var l=document.querySelectorAll('#main-grid .tile');if(!l.length)return;
+  var t=l[Math.floor(Math.random()*l.length)];
+  t.classList.add('flipped');setTimeout(function(){t.classList.remove('flipped');},3000);
+},4000);
+
+/* abrir app: inclina, home recua, tile cresce até a tela cheia */
+function abrirApp(id){
+  var a=appById(id)||SYS[id];if(!a)return;
+  var tileEl_=$('tile-'+a.id),tx=innerWidth/2-80,ty=innerHeight/2-60,tw=160,th=120;
+  if(tileEl_){var r=tileEl_.getBoundingClientRect();tx=r.left;ty=r.top;tw=r.width;th=r.height;
+    tileEl_.style.transition='transform .08s ease-out';tileEl_.style.transform='scale(.93) perspective(600px) rotateX(3deg) rotateY(-3deg)';}
+  var old=$('tile-splash');if(old)old.remove();
+  setTimeout(function(){
+    var grid=$('main-grid');grid.style.transition='transform .25s ease-in,opacity .25s ease-in';grid.style.transform='scale(.88)';grid.style.opacity='.2';
+    if(tileEl_){tileEl_.style.transition='transform .1s ease-in';tileEl_.style.transform='scale(1)';}
+    setTimeout(function(){
+      var sp=document.createElement('div');sp.id='tile-splash';
+      sp.style.cssText='position:fixed;left:'+tx+'px;top:'+ty+'px;width:'+tw+'px;height:'+th+'px;background:'+a.c+';z-index:99999;pointer-events:none;display:flex;align-items:center;justify-content:center;font-size:3rem;font-weight:700;transition:left .32s cubic-bezier(.4,0,.1,1),top .32s cubic-bezier(.4,0,.1,1),width .32s cubic-bezier(.4,0,.1,1),height .32s cubic-bezier(.4,0,.1,1)';
+      sp.textContent=a.n;document.body.appendChild(sp);void sp.offsetHeight;
+      sp.style.left='0px';sp.style.top='0px';sp.style.width='100vw';sp.style.height='100vh';
+      setTimeout(function(){
+        grid.style.transition='';grid.style.transform='';grid.style.opacity='';
+        if(tileEl_){tileEl_.style.transition='';tileEl_.style.transform='';}
+        if(a.u){carregarApp(a,sp);return;}          // app externo: rodinha, testa a conexão, só então abre
+        abrirInterno(a);
+        sp.style.transition='opacity .2s';sp.style.opacity='0';setTimeout(function(){sp.remove();},220);
+      },340);
+    },150);
+  },80);
+}
+
+/* ---- carregamento de app externo ---- */
+var carga=null;
+function carregarApp(a,sp){
+  if(carga)carga.cancel=true;
+  var my={cancel:false,a:a,sp:sp};carga=my;
+  sp.style.pointerEvents='auto';sp.style.flexDirection='column';sp.style.gap='1.6rem';sp.style.fontSize='1.3rem';sp.style.fontWeight='300';
+  sp.innerHTML='<img class="spin" src="'+SPIN+'" alt=""><div>Abrindo '+esc(a.n)+'…</div>';
+  var done=false,ctl=window.AbortController?new AbortController():null,t0=Date.now();
+  var tm=setTimeout(function(){if(ctl)try{ctl.abort();}catch(e){}falha();},12000);
+  function falha(){
+    if(done||my.cancel)return;done=true;clearTimeout(tm);
+    sp.innerHTML='<div style="font-size:2.4rem;font-weight:300">Erro de conexão</div>'+
+      '<div style="opacity:.9">Verifique a Internet e tente de novo.</div>'+
+      '<div style="display:flex;gap:1rem;margin-top:.6rem"><button class="btn" data-nav data-act="appRetry">Tentar de novo</button><button class="btn" data-nav data-act="appVoltar">Voltar</button></div>';
+    var b=sp.querySelector('[data-nav]');if(b)b.focus();
+  }
+  function ok(){
+    if(done||my.cancel)return;done=true;clearTimeout(tm);
+    setTimeout(function(){if(!my.cancel)location.href=a.u;},Math.max(0,500-(Date.now()-t0)));   // rodinha fica na tela enquanto o navegador troca de página
+  }
+  var o={mode:'no-cors',cache:'no-store'};if(ctl)o.signal=ctl.signal;
+  fetch(a.u,o).then(ok,falha);
+}
+function appVoltar(){
+  if(carga)carga.cancel=true;
+  var sp=$('tile-splash');
+  if(sp){sp.style.transition='opacity .25s';sp.style.opacity='0';setTimeout(function(){sp.remove();},260);}
+  var t=carga&&carga.a?$('tile-'+carga.a.id):null;
+  carga=null;
+  var p=t||document.querySelector('#main-grid .tile');if(p)p.focus();
+}
+function appRetry(){if(carga)carregarApp(carga.a,carga.sp);}
+function abrirInterno(a,secao){
+  tela('app-screen');
+  var area=$('app-content-area');area.innerHTML='';
+  var w=document.createElement('div');w.className='app-wrapper';
+  w.innerHTML='<div class="app-top"><button class="btn" data-nav data-act="voltar">'+ico('back')+'Voltar</button><h2>'+esc(a.n)+'</h2></div><div class="app-body turnstile-in" id="app-body"></div>';
+  area.appendChild(w);
+  if(a.id==='loja')lojaTela('Todos');else cfgTela(secao||'rede');
+  var b=area.querySelector('[data-nav]');if(b)b.focus();
+}
+function fecharApp(){tela('home-screen');renderHome();var p=document.querySelector('#main-grid .tile');if(p)p.focus();}
+
+/* =====================================================
+   LOJA (somente entretenimento)
+   ===================================================== */
+var catAtual='Todos';
+function lojaTela(cat){
+  catAtual=cat;
+  var tabs=CATS.map(function(c){return '<button class="pill'+(c===cat?' on':'')+'" data-nav data-act="lojaTab" data-arg="'+c+'">'+c+'</button>';}).join('');
+  var cards=APPS.filter(function(a){return cat==='Todos'||a.cat===cat;}).map(function(a){
+    var inst=instalados.indexOf(a.id)>=0;
+    return '<div class="card"><div class="swatch" style="background:'+a.c+'"><img src="'+(ICONS[a.id]||'')+'" alt=""></div>'+
+      '<div class="info"><b>'+esc(a.n)+'</b><small>'+esc(a.tag)+'</small></div>'+
+      (inst?'<button class="btn" data-nav data-act="remover" data-arg="'+a.id+'">Remover</button>':'<button class="btn blue" data-nav data-act="instalar" data-arg="'+a.id+'">Instalar</button>')+'</div>';
+  }).join('');
+  $('app-body').innerHTML='<div class="tabs">'+tabs+'</div><div class="store-grid">'+cards+'</div>';
+}
+function instalar(id){
+  var a=appById(id);if(!a)return;
+  $('inst-name').textContent='Instalando '+a.n;$('install').classList.add('on');
+  var p=0;
+  var iv=setInterval(function(){
+    p+=Math.floor(Math.random()*14)+6;if(p>100)p=100;
+    $('inst-pct').textContent=p+'%';$('inst-bar').style.width=p+'%';
+    if(p>=100){
+      clearInterval(iv);
+      setTimeout(function(){
+        $('install').classList.remove('on');
+        if(instalados.indexOf(id)<0)instalados.push(id);store.set('apps',instalados);
+        lojaTela(catAtual);toast(a.n+' foi adicionado à tela inicial');
+        var b=document.querySelector('[data-act="remover"][data-arg="'+id+'"]');if(b)b.focus();
+      },350);
+    }
+  },160);
+}
+function remover(id){
+  instalados=instalados.filter(function(x){return x!==id;});store.set('apps',instalados);
+  lojaTela(catAtual);toast('Removido da tela inicial');
+  var b=document.querySelector('[data-act="instalar"][data-arg="'+id+'"]');if(b)b.focus();
+}
+
+/* =====================================================
+   CONFIGURAÇÕES
+   ===================================================== */
+var SECOES=[['rede','Rede e Wi-Fi'],['standby','Standby'],['sobre','Sobre']];
+var redes=[];
+function cfgTela(sec){
+  var side=SECOES.map(function(s){return '<div class="cfg-item'+(s[0]===sec?' on':'')+'" tabindex="0" data-nav data-act="cfgSecao" data-arg="'+s[0]+'">'+s[1]+'</div>';}).join('');
+  $('app-body').innerHTML='<div class="cfg"><div class="cfg-side">'+side+'</div><div class="cfg-main" id="cfg-main"></div></div>';
+  var m=$('cfg-main');
+  if(sec==='rede'){
+    m.innerHTML='<h3>Rede e Wi-Fi</h3><p id="wifi-status">Verificando…</p><button class="btn" data-nav data-act="wifiBuscar">'+ico('wifi')+'Buscar redes</button><div id="wifi-lista" style="margin-top:1rem"></div>';
+    statusWifi(function(on,d){
+      var t=on?'Conectado'+(d&&d.ssid?' a <b>'+esc(d.ssid)+'</b>':'')+(d&&d.ip?' ('+esc(d.ip)+')':''):'Sem conexão com a internet';
+      var e=$('wifi-status');if(e)e.innerHTML=t;
+    });
+    wifiBuscar();
+  }else if(sec==='standby'){
+    var min=store.get('idleMin',10);
+    m.innerHTML='<h3>Standby</h3><p>Entrar em descanso depois de:</p>'+
+      [[0,'Nunca'],[2,'2 min'],[5,'5 min'],[10,'10 min'],[30,'30 min']].map(function(o){return '<button class="pill'+(o[0]===min?' on':'')+'" data-nav data-act="idleMin" data-arg="'+o[0]+'">'+o[1]+'</button>';}).join('')+
+      '<p style="margin-top:1.2rem"><button class="btn" data-nav data-act="standby">'+ico('moon')+'Testar Standby</button></p>';
+  }else{
+    m.innerHTML='<h3>Sobre</h3><div id="sobre-info"><p>Sistema: <b>LiveOS</b> (Linux)</p><p>Tela: <b>'+screen.width+'×'+screen.height+'</b></p></div>'+
+      '<p style="margin-top:1rem"><button class="btn" data-nav data-act="reiniciar">Reiniciar</button> <button class="btn red" data-nav data-act="restaurar">Restaurar apps</button></p>';
+    api('sysinfo',function(err,d){
+      var e=$('sobre-info');if(err||!d||!e)return;
+      e.innerHTML='<p>Sistema: <b>LiveOS</b> (Linux '+esc(d.kernel)+')</p><p>Tela: <b>'+screen.width+'×'+screen.height+'</b></p><p>Memória: <b>'+esc(d.mem)+'</b> • Ligado há: <b>'+esc(d.uptime)+'</b></p><p>IP: <b>'+esc(d.ip||'—')+'</b></p>';
+    });
+  }
+}
+function statusWifi(cb){
+  api('wifi-status',function(err,d){
+    var on=err?navigator.onLine:!!d.connected;
+    var w=$('wifi-ind');w.className=on?'on':'';$('wifi-txt').textContent=on?(d&&d.ssid?d.ssid:'Online'):'Sem internet';
+    if(cb)cb(on,d);
+  });
+}
+setInterval(function(){statusWifi();},10000);
+function wifiBuscar(){
+  var l=$('wifi-lista');if(!l)return;l.innerHTML='<p>Buscando redes…</p>';
+  api('wifi-scan',function(err,d){
+    l=$('wifi-lista');if(!l)return;
+    if(err||!d){l.innerHTML='<p>Não foi possível listar redes. '+(location.protocol==='file:'?'(Fora do TV Box a lista não existe.)':'Verifique se o adaptador Wi-Fi foi reconhecido.')+'</p>';return;}
+    redes=d.sort(function(a,b){return b.signal-a.signal;});
+    l.innerHTML=redes.length?redes.map(function(r,i){return '<div class="row" tabindex="0" data-nav data-act="wifiEscolher" data-arg="'+i+'"><b>'+esc(r.ssid)+'</b><small>'+(r.sec?'protegida':'aberta')+' · '+r.signal+' dBm</small></div>';}).join(''):'<p>Nenhuma rede encontrada.</p>';
+    var f=l.querySelector('[data-nav]');if(f)f.focus();
+  });
+}
+function wifiEscolher(i){
+  var r=redes[i];if(!r)return;
+  if(r.sec)abrirOSK({titulo:'Senha de '+r.ssid,senha:true,ok:function(v){conectar(r.ssid,v);}});
+  else conectar(r.ssid,'');
+}
+function conectar(ssid,psk){
+  var e=$('wifi-status');if(e)e.textContent='Conectando a '+ssid+'…';
+  api('wifi-connect?ssid='+encodeURIComponent(ssid)+'&psk='+encodeURIComponent(psk),function(err,d){
+    if(err||(d&&d.ok===false)){toast(err?'Falha ao enviar a rede ao sistema':'Rede inválida. A senha precisa ter 8 ou mais caracteres.');if(e)e.textContent='Não conectou.';return;}
+    var n=0,iv=setInterval(function(){
+      n++;statusWifi(function(on,d){
+        if(on||n>12){clearInterval(iv);var s=$('wifi-status');if(s)s.innerHTML=on?'Conectado a <b>'+esc((d&&d.ssid)||ssid)+'</b>':'Não conectou. Confira a senha.';toast(on?'Conectado!':'Não conectou');}
+      });
+    },2500);
+  });
+}
+
+/* =====================================================
+   TECLADO NA TELA (para senha do Wi-Fi só com controle)
+   ===================================================== */
+var oskRows=['1234567890','qwertyuiop','asdfghjkl','zxcvbnm.-_@'];
+var osk=null,oskFis=false;
+function oskBuild(){
+  var h=oskRows.map(function(r){return '<div class="krow">'+r.split('').map(function(c){return '<button class="k" data-nav data-act="oskKey" data-arg="'+c+'">'+c+'</button>';}).join('')+'</div>';}).join('');
+  h+='<div class="krow"><button class="k w" data-nav data-act="oskShift">Aa</button><button class="k w" data-nav data-act="oskKey" data-arg=" ">Espaço</button><button class="k w" data-nav data-act="oskDel">Apagar</button><button class="k w" data-nav data-act="oskShow">Mostrar</button></div>';
+  h+='<div class="krow"><button class="k w" data-nav data-act="oskCancel">Cancelar</button><button class="k w" data-nav data-act="oskOk">OK</button></div>';
+  $('osk-keys').innerHTML=h;
+}
+function abrirOSK(o){
+  osk={val:'',shift:false,show:!o.senha,senha:!!o.senha,ok:o.ok};oskFis=false;
+  $('osk-title').textContent=o.titulo||'Digite';oskBuild();oskAtualizar();$('osk').classList.add('on');
+  var k=$('osk-keys').querySelector('.k');if(k)k.focus();
+}
+function oskAtualizar(){
+  if(!osk)return;
+  $('osk-val').textContent=osk.show?osk.val:new Array(osk.val.length+1).join('\u2022');
+  var l=$('osk-keys').querySelectorAll('[data-act="oskKey"]'),i,c;
+  for(i=0;i<l.length;i++){c=l[i].getAttribute('data-arg');if(c.length===1&&c!==' ')l[i].textContent=osk.shift?c.toUpperCase():c;}
+}
+function oskAdd(c){if(!osk)return;osk.val+=(osk.shift&&c.length===1?c.toUpperCase():c);oskAtualizar();}
+function fecharOSK(){$('osk').classList.remove('on');osk=null;}
+
+/* =====================================================
+   CLIMA
+   ===================================================== */
+var WX={0:'Céu limpo',1:'Quase limpo',2:'Parcialmente nublado',3:'Nublado',45:'Neblina',48:'Neblina',51:'Garoa',53:'Garoa',55:'Garoa forte',61:'Chuva fraca',63:'Chuva',65:'Chuva forte',80:'Pancadas de chuva',81:'Pancadas de chuva',82:'Pancadas fortes',95:'Tempestade',96:'Tempestade',99:'Tempestade'};
+var loc=null,wxTxt=null,wxAt=0;
+function clima(cb){
+  if(wxTxt&&Date.now()-wxAt<900000){cb(wxTxt);return;}
+  function go(l){
+    json('https://api.open-meteo.com/v1/forecast?latitude='+l.lat+'&longitude='+l.lon+'&current_weather=true',function(err,d){
+      if(err||!d||!d.current_weather){cb(wxTxt);return;}
+      var c=d.current_weather;wxTxt=Math.round(c.temperature)+'°C · '+(WX[c.weathercode]||'')+' · '+l.city;wxAt=Date.now();cb(wxTxt);
+    });
+  }
+  if(loc){go(loc);return;}
+  json('https://ipapi.co/json/',function(err,d){loc=(!err&&d&&d.latitude)?{lat:d.latitude,lon:d.longitude,city:d.city||DEF_LOC.city}:DEF_LOC;go(loc);});
+}
+
+/* =====================================================
+   STANDBY (paisagens)
+   ===================================================== */
+function Fader(a,b,kb){this.a=a;this.b=b;this.front=null;this.kb=kb;}
+Fader.prototype.show=function(url,fb){
+  var self=this,next=this.front===this.a?this.b:this.a,prev=this.front;
+  function apply(css){
+    next.style.backgroundImage=css;next.classList.remove('kb');void next.offsetWidth;
+    next.classList.add('show');if(self.kb)next.classList.add('kb');
+    if(prev)prev.classList.remove('show');self.front=next;
+  }
+  if(!url){apply(fb||'none');return;}
+  var im=new Image();
+  im.onload=function(){apply('url("'+url+'")');};
+  im.onerror=function(){if(!self.front)apply(fb||'none');};
+  im.src=url;
+};
+var sbF=new Fader($('sb-a'),$('sb-b'),true),sbT=null;
+
+function sbPasso(){var p=periodo();sbF.show(pick(LAND[p]),FALLBACK[p]);$('sb-txt').textContent=pick(FRASES[p]);}
+function abrirStandby(){
+  fecharTudo();clearTimeout(tOcioso);
+  $('standby-screen').classList.add('on');sbF.front=null;
+  $('sb-a').className='layer';$('sb-b').className='layer';
+  relogio();$('sb-wx').textContent='';sbPasso();
+  clima(function(t){if($('standby-screen').classList.contains('on'))$('sb-wx').textContent=t||'';});
+  sbT=setInterval(sbPasso,45000);
+}
+function fecharTudo(){
+  clearInterval(sbT);
+  $('standby-screen').classList.remove('on');
+}
+/* qualquer entrada fecha o Standby; devolve true se consumiu o evento */
+function acordar(){
+  if($('standby-screen').classList.contains('on')){fecharTudo();resetOcioso();return true;}
+  return false;
+}
+
+/* inatividade */
+var tOcioso=null;
+function resetOcioso(){
+  clearTimeout(tOcioso);
+  var m=store.get('idleMin',10),t=telaAtiva();
+  if(!m||!t||(t.id!=='home-screen'&&t.id!=='app-screen'))return;
+  tOcioso=setTimeout(abrirStandby,m*60000);
+}
+
+/* =====================================================
+   AÇÕES (um só ponto para clique, OK do controle e gamepad)
+   ===================================================== */
+var ACOES={
+ abrir:function(a){abrirApp(a);},
+ voltar:function(){fecharApp();},appRetry:appRetry,appVoltar:appVoltar,
+ standby:abrirStandby,reiniciar:reiniciar,
+ lojaTab:function(a){lojaTela(a);var b=document.querySelector('[data-act="lojaTab"][data-arg="'+a+'"]');if(b)b.focus();},
+ instalar:instalar,remover:remover,
+ cfgSecao:function(a){cfgTela(a);var b=document.querySelector('[data-act="cfgSecao"][data-arg="'+a+'"]');if(b)b.focus();},
+ wifiBuscar:wifiBuscar,wifiEscolher:wifiEscolher,
+ idleMin:function(a){store.set('idleMin',parseInt(a,10));cfgTela('standby');var b=document.querySelector('[data-act="idleMin"][data-arg="'+a+'"]');if(b)b.focus();},
+ restaurar:function(){try{localStorage.clear();}catch(e){}instalados=APPS.filter(function(a){return a.home;}).map(function(a){return a.id;});toast('Apps restaurados ao padrão');},
+ oskKey:function(a){oskAdd(a);},
+ oskShift:function(){osk.shift=!osk.shift;oskAtualizar();},
+ oskDel:function(){if(osk){osk.val=osk.val.slice(0,-1);oskAtualizar();}},
+ oskShow:function(){osk.show=!osk.show;oskAtualizar();},
+ oskCancel:fecharOSK,
+ oskOk:function(){var f=osk&&osk.ok,v=osk&&osk.val;fecharOSK();if(f)f(v);}
+};
+document.addEventListener('click',function(e){
+  if(acordar())return;
+  resetOcioso();
+  var t=e.target.closest?e.target.closest('[data-act]'):null;
+  if(t&&ACOES[t.getAttribute('data-act')])ACOES[t.getAttribute('data-act')](t.getAttribute('data-arg'));
+});
+
+/* ---- navegação espacial por setas ---- */
+function escopo(){
+  var sp=$('tile-splash');if(sp&&sp.querySelector('[data-nav]'))return sp;
+  if($('install').classList.contains('on'))return null;
+  if($('osk').classList.contains('on'))return $('osk');
+  return telaAtiva();
+}
+function focaveis(){
+  var e=escopo();if(!e)return [];
+  return Array.prototype.filter.call(e.querySelectorAll('[data-nav]'),function(x){return x.getClientRects().length>0;});
+}
+function centro(r){return {x:r.left+r.width/2,y:r.top+r.height/2};}
+function mover(dir){
+  var els=focaveis();if(!els.length)return;
+  var cur=document.activeElement;
+  if(!cur||els.indexOf(cur)<0){els[0].focus();return;}
+  var c=centro(cur.getBoundingClientRect()),best=null,bd=1e9;
+  els.forEach(function(el){
+    if(el===cur)return;
+    var o=centro(el.getBoundingClientRect()),dx=o.x-c.x,dy=o.y-c.y,ok=false,dist;
+    var tol=innerHeight*0.1;
+    if(dir==='left')ok=dx<-8&&Math.abs(dy)<Math.abs(dx)*1.2+tol;
+    if(dir==='right')ok=dx>8&&Math.abs(dy)<Math.abs(dx)*1.2+tol;
+    if(dir==='up')ok=dy<-8&&Math.abs(dx)<Math.abs(dy)*1.2+innerWidth*0.1;
+    if(dir==='down')ok=dy>8&&Math.abs(dx)<Math.abs(dy)*1.2+innerWidth*0.1;
+    if(!ok)return;
+    dist=(dir==='left'||dir==='right')?Math.abs(dx)+Math.abs(dy)*2.5:Math.abs(dy)+Math.abs(dx)*2.5;
+    if(dist<bd){bd=dist;best=el;}
+  });
+  if(best){best.focus();if(best.scrollIntoView)best.scrollIntoView({block:'nearest',inline:'nearest'});}
+}
+function acao(a){
+  if(acordar())return true;
+  resetOcioso();
+  var t=telaAtiva();
+  var spl=$('tile-splash');
+  if(spl){
+    if(a==='back'||a==='home'){appVoltar();return true;}
+    if(!spl.querySelector('[data-nav]'))return true;   // carregando: ignora teclas
+  }
+  if(a==='up'||a==='down'||a==='left'||a==='right'){oskFis=false;mover(a);return true;}
+  if(a==='ok'){
+    var f=document.activeElement;
+    if(osk&&oskFis){ACOES.oskOk();return true;}
+    if(f&&f.click&&f.hasAttribute&&f.hasAttribute('data-nav')){f.click();return true;}
+    var els=focaveis();if(els.length)els[0].focus();return true;
+  }
+  if(a==='back'){
+    if(osk){fecharOSK();return true;}
+    if(t&&t.id==='app-screen'){fecharApp();return true;}
+    return false;
+  }
+  if(a==='home'){
+    if(osk)fecharOSK();
+    if(t&&t.id==='app-screen')fecharApp();
+    return true;
+  }
+  return false;
+}
+var KEYS={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',Enter:'ok',Escape:'back',BrowserBack:'back',GoBack:'back',Home:'home',BrowserHome:'home'};
+document.addEventListener('keydown',function(e){
+  if(osk&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
+    if(e.key.length===1){oskFis=true;oskAdd(e.key);e.preventDefault();return;}
+    if(e.key==='Backspace'){oskFis=true;ACOES.oskDel();e.preventDefault();return;}
+  }
+  var a=KEYS[e.key]||(e.key==='Backspace'?'back':null);
+  if(!a){if(acordar())e.preventDefault();else resetOcioso();return;}
+  if(acao(a))e.preventDefault();
+},true);
+document.addEventListener('mousemove',function(){if(acordar())return;},false);
+
+/* ---- controle de jogo (Gamepad API): direcional, A = OK, B = voltar ---- */
+var gpPrev={};
+setInterval(function(){
+  var pads=navigator.getGamepads?navigator.getGamepads():[],i,p;
+  for(i=0;i<pads.length;i++){
+    p=pads[i];if(!p)continue;
+    var b=function(n){return p.buttons[n]&&p.buttons[n].pressed;};
+    var st={up:b(12)||p.axes[1]<-.6,down:b(13)||p.axes[1]>.6,left:b(14)||p.axes[0]<-.6,right:b(15)||p.axes[0]>.6,ok:b(0),back:b(1),home:b(16)};
+    for(var k in st){if(st[k]&&!gpPrev[k])acao(k);}
+    gpPrev=st;break;
+  }
+},90);
+
+/* ===== início ===== */
+fillIcons();
+ligar();
+})();
+</script>
+</body>
+</html>

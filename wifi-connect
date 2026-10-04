@@ -1,0 +1,11 @@
+#!/bin/sh
+. /usr/lib/liveos/common.sh
+guard; json_head
+SSID=$(qget ssid); PSK=$(qget psk)
+if [ -z "$SSID" ]; then echo '{"ok":false}'; exit 0; fi
+if /usr/lib/liveos/wifi-write.sh "$SSID" "$PSK"; then
+	( /etc/init.d/S40wifi restart </dev/null >/dev/null 2>&1 & )
+	echo '{"ok":true}'
+else
+	echo '{"ok":false,"erro":"senha invalida"}'
+fi

@@ -1,0 +1,4 @@
+# Wi-Fi de fabrica do LiveOS. Edite no computador, salve e coloque o SD na TV.
+# Apague o "#" das duas linhas abaixo e preencha. A senha precisa ter 8+ caracteres.
+#SSID=NomeDaSuaRede
+#SENHA=SuaSenhaAqui

@@ -1,0 +1,28 @@
+#!/bin/sh
+. /usr/lib/liveos/common.sh
+guard; json_head
+IF=$(wifi_if)
+[ -z "$IF" ] && { echo '[]'; exit 0; }
+ip link set "$IF" up 2>/dev/null
+n=0; OUT=""
+while [ $n -lt 3 ]; do
+	OUT=$(iw dev "$IF" scan 2>/dev/null)
+	[ -n "$OUT" ] && break
+	n=$((n+1)); sleep 1
+done
+echo "$OUT" | awk '
+function flush() {
+	gsub(/[\\"]/, "", ssid)
+	if (ssid != "" && !(ssid in seen)) {
+		seen[ssid] = 1
+		printf "%s{\"ssid\":\"%s\",\"signal\":%d,\"sec\":%d}", (cnt++ ? "," : ""), ssid, sig, sec
+	}
+	ssid = ""; sig = -100; sec = 0
+}
+BEGIN { printf "["; sig = -100 }
+/^BSS / { flush() }
+/signal:/ { sig = $2 }
+/^[ \t]*SSID:/ { s = $0; sub(/^[ \t]*SSID: ?/, "", s); ssid = s }
+/RSN:|WPA:/ { sec = 1 }
+/capability:.*Privacy/ { sec = 1 }
+END { flush(); printf "]" }'
