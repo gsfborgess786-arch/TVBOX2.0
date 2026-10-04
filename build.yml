@@ -1,0 +1,67 @@
+name: Gerar LiveOS
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Liberar espaço em disco
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Instalar dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git wget cpio unzip rsync bc file python3 \
+            libncurses-dev libssl-dev swig python3-setuptools python3-dev python3-pyelftools ccache
+
+      # Restaura o que já foi compilado em tentativas anteriores (permite continuar de onde parou)
+      - name: Restaurar cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.buildroot-ccache
+            buildroot/dl
+          key: liveos-cache-${{ github.run_id }}
+          restore-keys: liveos-cache-
+
+      - name: Preparar Buildroot
+        run: |
+          BR_VER=2024.08.1
+          [ -d buildroot ] || { wget -q https://buildroot.org/downloads/buildroot-$BR_VER.tar.gz && tar xf buildroot-$BR_VER.tar.gz && mv buildroot-$BR_VER buildroot; }
+          make -C buildroot BR2_EXTERNAL="$PWD/external" liveos_rk3066_defconfig
+
+      # Para antes do limite de 6 h do GitHub, para o cache poder ser salvo
+      - name: Compilar (até 5h20)
+        run: timeout 5h20m make -C buildroot -j"$(nproc)" || echo "Parou antes de terminar (limite de tempo ou erro)."
+
+      - name: Salvar cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildroot-ccache
+            buildroot/dl
+          key: liveos-cache-${{ github.run_id }}
+
+      - name: Montar arquivos finais
+        run: |
+          IMGS="$PWD/buildroot/output/images"
+          if [ ! -f "$IMGS/sdcard.img" ]; then
+            echo "::error::Build incompleto. Clique em 'Re-run all jobs' para continuar de onde parou (se já rodou várias vezes, veja o erro no passo Compilar)."
+            exit 1
+          fi
+          tools/make-nand-loader.sh "$IMGS" "$PWD/saida"
+          cp "$IMGS/sdcard.img" saida/
+          xz -T0 -3 saida/sdcard.img      # o balenaEtcher grava .xz direto
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: liveos-arquivos
+          path: saida/
+          retention-days: 14
